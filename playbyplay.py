@@ -77,7 +77,8 @@ for year in years:
     flat_data['sequenceNumber'] = flat_data['sequenceNumber'].astype(int)
     flat_data['sequenceNumber'] = flat_data['scoringPlay'].astype(int)
     flat_data['priority'] = flat_data['priority'].astype(int)
-    flat_data = flat_data.drop(columns=["participants"])
+    if "participants" in flat_data.columns:
+        flat_data = flat_data.drop(columns=["participants"])
     flat_data.to_sql("play_data", conn, if_exists="replace", index=False)
     conn.commit()
 
