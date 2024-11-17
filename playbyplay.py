@@ -45,11 +45,10 @@ CREATE TABLE IF NOT EXISTS play_data (
 
 conn.commit()
 
-# 
-years = {2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024}
+years = {2010}
+fourth_quarter_drives = []
 
 for year in years:
-    fourth_quarter_plays = []
     game_ids = []
     url=f"http://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?limit=1000&dates={year}"
     response = requests.get(url)
@@ -62,24 +61,25 @@ for year in years:
         print(f"Failed to retrieve data. Status code: {response.status_code}")
     time.sleep(0.1)
     for game_id in tqdm(game_ids):
-        game_url = f"https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/events/{game_id}/competitions/{game_id}/plays?limit=300"
+        game_url = f"https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/events/{game_id}/competitions/{game_id}/drives"
         game_response = requests.get(game_url)
         if game_response.status_code == 200:
-            play_by_play_data = game_response.json()
-            for plays in play_by_play_data['items']:
-                if plays['period']['number'] == 4:
-                    fourth_quarter_plays.append(plays)
+            game_drives = game_response.json()
+            for drive in game_drives['items']:
+                if drive['start']['period']['number'] == 4:
+                    fourth_quarter_drives.append(json_normalize(drive['plays']['items'], sep='_'))
         else:
             print(f"Failed to retrieve play by play data. Status code: {game_response.status_code}")
         time.sleep(0.1)
 
-    flat_data = json_normalize(fourth_quarter_plays, sep='_')  # Separates nested keys with underscores
-    flat_data['sequenceNumber'] = flat_data['sequenceNumber'].astype(int)
-    flat_data['sequenceNumber'] = flat_data['scoringPlay'].astype(int)
-    flat_data['priority'] = flat_data['priority'].astype(int)
-    flat_data = flat_data.drop(columns=["participants"])
-    flat_data.to_sql("play_data", conn, if_exists="replace", index=False)
-    conn.commit()
+    # flat_data = json_normalize(fourth_quarter_plays, sep='_')  # Separates nested keys with underscores
+    # flat_data['sequenceNumber'] = flat_data['sequenceNumber'].astype(int)
+    # flat_data['sequenceNumber'] = flat_data['scoringPlay'].astype(int)
+    # flat_data['priority'] = flat_data['priority'].astype(int)
+    # if "participants" in flat_data.columns:
+    #     flat_data = flat_data.drop(columns=["participants"])
+#     flat_data.to_sql("play_data", conn, if_exists="replace", index=False)
+#     conn.commit()
 
-conn.close()
+# conn.close()
 
