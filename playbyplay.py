@@ -3,7 +3,10 @@ import time
 import sqlite3
 from tqdm import tqdm
 from pandas import json_normalize
+import numpy as np
+import pandas as pd
 
+"""
 conn = sqlite3.connect("/Users/abeljohn/Developer/NFLPlayProject/play_by_play.db")
 cursor = conn.cursor()
 
@@ -44,9 +47,17 @@ CREATE TABLE IF NOT EXISTS play_data (
 ''')
 
 conn.commit()
+"""
 
+# years = {2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024}
 years = {2010}
 fourth_quarter_drives = []
+
+num_states = 5
+states = [[] for i in range(num_states)]
+actions = []
+rewards = []
+terminal = []
 
 for year in years:
     game_ids = []
@@ -71,7 +82,7 @@ for year in years:
         else:
             print(f"Failed to retrieve play by play data. Status code: {game_response.status_code}")
         time.sleep(0.1)
-
+    
     # flat_data = json_normalize(fourth_quarter_plays, sep='_')  # Separates nested keys with underscores
     # flat_data['sequenceNumber'] = flat_data['sequenceNumber'].astype(int)
     # flat_data['sequenceNumber'] = flat_data['scoringPlay'].astype(int)
@@ -80,6 +91,91 @@ for year in years:
     #     flat_data = flat_data.drop(columns=["participants"])
 #     flat_data.to_sql("play_data", conn, if_exists="replace", index=False)
 #     conn.commit()
+    
+    for flat_data in fourth_quarter_drives:
+        # print(flat_data.columns)
+        # print(flat_data["type_text"].value_counts())
+        num_plays = 0
+        for i in range(len(flat_data)):
+            row = flat_data.iloc[i]
+
+            play = row["type_text"]
+            if play == "Pass" or play == "Pass Interception" or play == "Sack":
+                actions.append(0)
+            elif play == "Rush":
+                actions.append(1)
+            elif play == "Field Goal" or play == "Field Goal Missed":
+                actions.append(2)
+            else:
+                continue        
+            
+            num_plays += 1
+
+            score_difference = abs(row["homeScore"] - row["awayScore"])
+            score_difference = 0 if score_difference <= 3 else 1 if score_difference <= 8 else 2 if score_difference <= 16 else 3
+            
+            time_left = row["clock_value"] // 60
+            time_left = 0 if time_left <= 2 else 1 if time_left <= 5 else 2
+            
+            down = row["start_down"] - 1
+            
+            yards_to_first_down = int(row["start_distance"] // 5)
+            yards_to_first_down = 0 if yards_to_first_down <= 5 else 2 if yards_to_first_down <= 10 else 3
+            
+            yards_to_end_zone = row["start_yardsToEndzone"]
+            yards_to_end_zone = 0 if yards_to_end_zone <= 10 else 1 if yards_to_end_zone <= 30 else 2 if yards_to_end_zone <= 50 else 3
+            
+            states[0].append(score_difference)
+            states[1].append(time_left)
+            states[2].append(down)
+            states[3].append(yards_to_first_down)
+            states[4].append(yards_to_end_zone)
+            terminal.append(0)            
+
+            yards_gained = row["start_yardsToEndzone"] - row["end_yardsToEndzone"]
+            score_value = row["scoreValue"]
+            reward = yards_gained * 0.1 + score_value
+            if play == "Pass Interception" or play == "Sack" or play == "Field Goal Missed":
+                reward -= 2
+            rewards.append(reward)            
+            
+            if score_value != 0:
+                break
+        if num_plays > 0:
+            terminal[-1] = 1
+        print()
+
+states = np.array(states)
+ranges = []
+for i in range(num_states):
+    max_value = max(states[i])
+    min_value = min(states[i])    
+    ranges.append(max_value - min_value + 1)
+ranges = tuple(ranges)
+states = np.ravel_multi_index(states, ranges)
+
+next_states = [-1] * len(states)
+for i in range(len(states)):
+    if not terminal[i]:
+        next_states[i] = states[i + 1]
+
+plays = np.array([states, actions, rewards, next_states])
+plays = np.transpose(plays)
+plays = pd.DataFrame(plays, columns = ["state", "action", "reward", "next_state"])
+plays[["state", "action", "next_state"]] = plays[["state", "action", "next_state"]].astype(int)
 
 # conn.close()
+
+
+
+
+
+
+
+
+
+
+
+
+
 
