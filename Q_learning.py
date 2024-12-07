@@ -1,3 +1,5 @@
+# Q_learning.py
+
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
@@ -6,22 +8,20 @@ import pandas as pd
 
 alpha = 0.1
 gamma = 0.95
-epochs = 1
+epochs = 5
 
 conn = sqlite3.connect("/Users/abeljohn/Developer/NFLPlayProject/play_by_play.db")
 
-query = "SELECT * FROM state_play_data"
+query = "SELECT * FROM disc_plays_no_2024"
 
-df = pd.read_sql_query(query, conn)
+plays = pd.read_sql_query(query, conn)
 
-conn.close()
-
-states = df['s'].unique()
-actions = df['a'].unique()
+states = plays['state'].unique()
+actions = plays['action'].unique()
 Q_table = pd.DataFrame(0, index=states, columns=actions, dtype=float)
 for epoch in tqdm(range(epochs)):
-    for index, row in df.iterrows():
-        s, a, r, sp = row['s'], row['a'], row['r'], row['sp']
+    for index, row in plays.iterrows():
+        s, a, r, sp = row['state'], row['action'], row['reward'], row['next_state']
         
         current_q = Q_table.loc[s, a]
         
@@ -31,6 +31,9 @@ for epoch in tqdm(range(epochs)):
         Q_table.loc[s, a] = new_q
 
 optimal_policy = Q_table.idxmax(axis=1)
-# with open("/Users/abeljohn/Downloads/medium.policy", "w") as f:
-#         for si in range(1, 50001):
-#             f.write(f"{optimal_policy[si]}\n")
+print(optimal_policy)
+print(len(optimal_policy))
+# breakpoint()
+optimal_policy_df = optimal_policy.reset_index()
+optimal_policy_df.to_sql('optimal_policy', conn, if_exists='replace', index=False)
+conn.close()
